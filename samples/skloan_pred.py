@@ -12,6 +12,8 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, Gradien
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import make_pipeline
+from sklearn.compose import make_column_transformer
 
 mydebug = 1
 
@@ -36,35 +38,27 @@ def split_train_data():
     X_train, X_test, y_train, y_test = train_test_split(train, train['Loan_Status'], test_size=0.2, random_state=1)
 
 
-def make_column_transformer():
+def gen_column_transformer():
     global numeric_transformer, categorical_transformer
-    numeric_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='median')),
-        ('scaler', StandardScaler())])
-    categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
-        ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+    numeric_transformer = make_pipeline(SimpleImputer(strategy='median'), StandardScaler())
+    categorical_transformer = make_pipeline(SimpleImputer(strategy='constant', fill_value='missing'),
+                                            OneHotEncoder(handle_unknown='ignore'))
 
 
 def apply_column_transformer():
-    global preprocessor
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', numeric_transformer, numeric_features),
-            ('cat', categorical_transformer, categorical_features)])
+    global col_transformer
+    col_transformer = make_column_transformer((numeric_transformer, numeric_features),
+                                           (categorical_transformer, categorical_features))
+    if mydebug:
+        print("col_transformer = ", str(col_transformer))
 
 
 def run_random_forest_classifier_best_params():
     param_grid = dict(classifier__n_estimators=[200, 500], classifier__max_features=['auto', 'sqrt', 'log2'],
                       classifier__max_depth=[4, 5, 6, 7, 8], classifier__criterion=['gini', 'entropy'])
 
-    rf = Pipeline(steps=[("preprocessor", preprocessor),
-                         ("classifier", RandomForestClassifier())])
-
-    # rf.fit(X_train, y_train)
-
-    # y_pred = rf.predict(X_test)
-    # print("RandomForestClassifier", y_pred)
+    # rf = Pipeline(steps=[("preprocessor", preprocessor),("classifier", RandomForestClassifier())])
+    rf = make_pipeline(col_transformer, classifier)
 
     cv = GridSearchCV(rf, param_grid, n_jobs=1)
 
@@ -74,10 +68,6 @@ def run_random_forest_classifier_best_params():
 
 
 def run_classifiers():
-    '''
-
-    :return:
-    '''
     classifiers_str = ["KNeighborsClassifier", "SVC", "NuSVC",
                        "DecisionTreeClassifier", "RandomForestClassifier",
                        "AdaBoostClassifier", "GradientBoostingClassifier"
@@ -93,7 +83,7 @@ def run_classifiers():
     ]
     l = len(classifiers)
     for classifier, i in zip(classifiers, range(l)):
-        pipe = Pipeline(steps=[('preprocessor', preprocessor), ('classifier', classifier)])
+        pipe = make_pipeline(col_transformer, classifier)
         pipe.fit(X_train, y_train)
         # print(classifier)
         print("%s model score: %.3f percent" % (classifiers_str[i], pipe.score(X_test, y_test) * 100))
@@ -120,21 +110,13 @@ def do_main():
     print(y_test.describe())
 
     # make col transformers
-    make_column_transformer()
+    gen_column_transformer()
 
     # apply em
     apply_column_transformer()
-    if mydebug:
-        print(preprocessor)
-
-    # grid search for best params
-    # run_random_forest_classifier_best_params()
 
     # run classifiers
     run_classifiers()
-
-
-
 
 if __name__ == "__main__":
     print("main")
